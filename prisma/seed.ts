@@ -1,11 +1,15 @@
-import { PrismaClient, DealStage, TaskStatus, RelatedType } from '@prisma/client'
+import { PrismaClient, DealStage, TaskStatus, RelatedType, UserRole } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 async function main() {
   // Create seed user
-  const hashedPassword = await bcrypt.hash(process.env.SEED_USER_PASSWORD || 'password123', 10)
+  const seedPassword = process.env.SEED_USER_PASSWORD
+  if (!seedPassword) {
+    throw new Error('SEED_USER_PASSWORD environment variable is required')
+  }
+  const hashedPassword = await bcrypt.hash(seedPassword, 10)
 
   const user = await prisma.user.upsert({
     where: { email: process.env.SEED_USER_EMAIL || 'admin@example.com' },
@@ -14,6 +18,7 @@ async function main() {
       email: process.env.SEED_USER_EMAIL || 'admin@example.com',
       passwordHash: hashedPassword,
       name: 'Admin User',
+      role: UserRole.ADMIN,
     },
   })
 

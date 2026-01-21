@@ -12,30 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DealStage } from '@prisma/client'
 import { Target, DollarSign } from 'lucide-react'
-
-// Mock data for now - in real implementation this would fetch from database
-const mockDeals = [
-  {
-    id: '1',
-    title: 'Enterprise Software License',
-    amountCents: 25000000,
-    stage: DealStage.PROPOSAL,
-    closeDate: new Date('2024-02-15'),
-    company: { id: '1', name: 'TechCorp Solutions' },
-    contact: { id: '1', firstName: 'John', lastName: 'Smith' },
-    createdAt: new Date('2024-01-01'),
-  },
-  {
-    id: '2',
-    title: 'Mobile App Development',
-    amountCents: 7500000,
-    stage: DealStage.WON,
-    closeDate: new Date('2023-12-20'),
-    company: { id: '2', name: 'StartupXYZ' },
-    contact: { id: '2', firstName: 'Mike', lastName: 'Davis' },
-    createdAt: new Date('2023-11-15'),
-  },
-]
+import { getDeals } from '@/lib/actions/deals'
 
 const stageColors = {
   [DealStage.LEAD]: 'bg-gray-100 text-gray-800',
@@ -47,8 +24,7 @@ const stageColors = {
 }
 
 export async function DealsTable() {
-  // In real implementation: const deals = await getDeals()
-  const deals = mockDeals
+  const deals = await getDeals()
 
   return (
     <div className="rounded-md border">

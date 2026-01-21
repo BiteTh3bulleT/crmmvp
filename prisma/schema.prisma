@@ -81,6 +81,7 @@ model User {
   email        String   @unique
   passwordHash String
   name         String?
+  role         UserRole @default(USER)
   createdAt    DateTime @default(now())
 
   // Relations
@@ -93,6 +94,11 @@ model User {
   documentEmbeddings DocumentEmbedding[]
 
   @@map("users")
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
 model Company {

@@ -12,36 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TaskStatus, RelatedType } from '@prisma/client'
 import { CheckSquare, Clock } from 'lucide-react'
-
-// Mock data for now - in real implementation this would fetch from database
-const mockTasks = [
-  {
-    id: '1',
-    title: 'Follow up on Enterprise Software proposal',
-    dueAt: new Date('2024-01-25'),
-    status: TaskStatus.OPEN,
-    relatedType: RelatedType.DEAL,
-    relatedId: '1',
-    createdAt: new Date('2024-01-01'),
-  },
-  {
-    id: '2',
-    title: 'Prepare demo for Manufacturing Automation',
-    dueAt: new Date('2024-01-28'),
-    status: TaskStatus.OPEN,
-    relatedType: RelatedType.DEAL,
-    relatedId: '2',
-    createdAt: new Date('2024-01-02'),
-  },
-  {
-    id: '3',
-    title: 'Send contract for Mobile App Development',
-    status: TaskStatus.DONE,
-    relatedType: RelatedType.DEAL,
-    relatedId: '3',
-    createdAt: new Date('2023-12-15'),
-  },
-]
+import { getTasks } from '@/lib/actions/tasks'
 
 const statusColors = {
   [TaskStatus.OPEN]: 'bg-blue-100 text-blue-800',
@@ -49,8 +20,7 @@ const statusColors = {
 }
 
 export async function TasksTable() {
-  // In real implementation: const tasks = await getTasks()
-  const tasks = mockTasks
+  const tasks = await getTasks()
 
   return (
     <div className="rounded-md border">

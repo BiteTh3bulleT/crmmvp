@@ -167,9 +167,5 @@ print_status "Demo data seeded"
 # Start the development server
 print_info "Starting development server..."
 print_info "The application will be available at: http://localhost:3000"
-print_info "Login credentials:"
-print_info "  Email: admin@example.com"
-print_info "  Password: password123"
-echo ""
 
 npm run dev
