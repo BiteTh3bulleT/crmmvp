@@ -1,0 +1,246 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+enum DealStage {
+  LEAD
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+}
+
+enum RelatedType {
+  CONTACT
+  COMPANY
+  DEAL
+  NONE
+}
+
+// Assistant-specific enums
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum SourceType {
+  COMPANY
+  CONTACT
+  DEAL
+  TASK
+  NOTE
+}
+
+enum ActionStatus {
+  PROPOSED
+  CONFIRMED
+  CANCELLED
+  EXECUTED
+  FAILED
+}
+
+enum ActionType {
+  CREATE_TASK
+  CREATE_NOTE
+  CREATE_DEAL
+  CREATE_CONTACT
+  CREATE_COMPANY
+  UPDATE_DEAL_STAGE
+  UPDATE_CONTACT
+  UPDATE_COMPANY
+  UPDATE_TASK
+  DELETE_TASK
+  DELETE_NOTE
+  DELETE_DEAL
+  DELETE_CONTACT
+  DELETE_COMPANY
+  BULK_UPDATE_DEALS
+  BULK_UPDATE_TASKS
+  BULK_UPDATE_CONTACTS
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  companies          Company[]
+  contacts           Contact[]
+  deals              Deal[]
+  tasks              Task[]
+  notes              Note[]
+  assistantThreads   AssistantThread[]
+  documentEmbeddings DocumentEmbedding[]
+
+  @@map("users")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  website   String?
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  ownerUserId String
+  owner       User      @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  contacts    Contact[]
+  deals       Deal[]
+
+  @@map("companies")
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  title     String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  ownerUserId String
+  owner       User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id])
+  deals       Deal[]
+
+  @@map("contacts")
+}
+
+model Deal {
+  id        String    @id @default(cuid())
+  title     String
+  amountCents Int?
+  stage     DealStage
+  closeDate DateTime?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  ownerUserId String
+  owner       User     @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id])
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id])
+
+  @@map("deals")
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  title       String
+  dueAt       DateTime?
+  status      TaskStatus  @default(OPEN)
+  relatedType RelatedType @default(NONE)
+  relatedId   String?
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  ownerUserId String
+  owner       User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+model Note {
+  id          String      @id @default(cuid())
+  body        String
+  relatedType RelatedType
+  relatedId   String
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  ownerUserId String
+  owner       User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@map("notes")
+}
+
+// ==========================================
+// NLP Assistant Models
+// ==========================================
+
+model AssistantThread {
+  id          String   @id @default(cuid())
+  title       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ownerUserId String
+  owner       User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  messages    AssistantMessage[]
+  actions     AssistantAction[]
+
+  @@map("assistant_threads")
+}
+
+model AssistantMessage {
+  id        String      @id @default(cuid())
+  role      MessageRole
+  content   String
+  createdAt DateTime    @default(now())
+
+  // Relations
+  threadId String
+  thread   AssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("assistant_messages")
+}
+
+model DocumentEmbedding {
+  id          String     @id @default(cuid())
+  sourceType  SourceType
+  sourceId    String
+  contentText String
+  embedding   Unsupported("vector(384)")?
+  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime   @default(now())
+
+  // Relations
+  ownerUserId String
+  owner       User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceType, sourceId])
+  @@map("document_embeddings")
+}
+
+model AssistantAction {
+  id          String       @id @default(cuid())
+  status      ActionStatus @default(PROPOSED)
+  actionType  ActionType
+  payloadJson Json
+  errorMsg    String?
+  createdAt   DateTime     @default(now())
+  executedAt  DateTime?
+
+  // Relations
+  threadId String
+  thread   AssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("assistant_actions")
+}
