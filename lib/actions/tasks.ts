@@ -100,4 +100,23 @@ export async function deleteTask(id: string) {
   })
 
   revalidatePath('/tasks')
+}export async function getTask(id: string) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized")
+  }
+
+  const task = await prisma.task.findFirst({
+    where: {
+      id,
+      ownerUserId: session.user.id,
+    },
+  })
+
+  if (!task) {
+    throw new Error("Task not found")
+  }
+
+  return task
 }
