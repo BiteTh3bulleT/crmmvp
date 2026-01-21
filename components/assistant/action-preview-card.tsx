@@ -20,7 +20,9 @@ import {
   Target,
   RefreshCw,
   User,
-  Building2
+  Building2,
+  Trash2,
+  Copy
 } from 'lucide-react'
 import { ActionType, ActionStatus } from '@prisma/client'
 import { formatActionForDisplay } from '@/lib/assistant-schemas'
@@ -39,18 +41,40 @@ const actionIcons: Record<ActionType, React.ElementType> = {
   CREATE_TASK: ListTodo,
   CREATE_NOTE: FileText,
   CREATE_DEAL: Target,
+  CREATE_CONTACT: User,
+  CREATE_COMPANY: Building2,
   UPDATE_DEAL_STAGE: RefreshCw,
   UPDATE_CONTACT: User,
-  UPDATE_COMPANY: Building2
+  UPDATE_COMPANY: Building2,
+  UPDATE_TASK: ListTodo,
+  DELETE_TASK: Trash2,
+  DELETE_NOTE: Trash2,
+  DELETE_DEAL: Trash2,
+  DELETE_CONTACT: Trash2,
+  DELETE_COMPANY: Trash2,
+  BULK_UPDATE_DEALS: Copy,
+  BULK_UPDATE_TASKS: Copy,
+  BULK_UPDATE_CONTACTS: Copy
 }
 
 const actionLabels: Record<ActionType, string> = {
   CREATE_TASK: 'Create Task',
   CREATE_NOTE: 'Add Note',
   CREATE_DEAL: 'Create Deal',
+  CREATE_CONTACT: 'Create Contact',
+  CREATE_COMPANY: 'Create Company',
   UPDATE_DEAL_STAGE: 'Update Deal Stage',
   UPDATE_CONTACT: 'Update Contact',
-  UPDATE_COMPANY: 'Update Company'
+  UPDATE_COMPANY: 'Update Company',
+  UPDATE_TASK: 'Update Task',
+  DELETE_TASK: 'Delete Task',
+  DELETE_NOTE: 'Delete Note',
+  DELETE_DEAL: 'Delete Deal',
+  DELETE_CONTACT: 'Delete Contact',
+  DELETE_COMPANY: 'Delete Company',
+  BULK_UPDATE_DEALS: 'Bulk Update Deals',
+  BULK_UPDATE_TASKS: 'Bulk Update Tasks',
+  BULK_UPDATE_CONTACTS: 'Bulk Update Contacts'
 }
 
 const statusColors: Record<ActionStatus, string> = {

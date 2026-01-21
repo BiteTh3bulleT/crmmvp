@@ -356,6 +356,13 @@ npm run startup
 - **Production**: Use `npm run db:migrate` for versioned migrations
 - **Studio**: `npm run db:studio` for database GUI
 
+### Testing
+
+```bash
+npm test
+npm run test:watch
+```
+
 ## Deployment
 
 ### Environment Variables
@@ -364,7 +371,8 @@ npm run startup
 # Core
 DATABASE_URL="postgresql://user:password@host:5432/db"
 NEXTAUTH_URL="https://yourdomain.com"
-NEXTAUTH_SECRET="your-nextauth-secret"
+# Generate with: openssl rand -base64 32
+NEXTAUTH_SECRET=""
 
 # Seed User
 SEED_USER_EMAIL="admin@yourdomain.com"

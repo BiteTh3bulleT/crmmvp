@@ -93,7 +93,7 @@ export function SearchResults({ query, results, onClose }: SearchResultsProps) {
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm flex items-center">
             <Search className="mr-2 h-4 w-4" />
-            Search Results for "{query}"
+            Search Results for &quot;{query}&quot;
             {totalResults > 0 && (
               <Badge variant="secondary" className="ml-2">
                 {totalResults}

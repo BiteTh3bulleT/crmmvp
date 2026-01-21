@@ -68,11 +68,8 @@ export async function getCompany(id: string) {
       deals: {
         orderBy: { createdAt: 'desc' },
       },
-      notes: {
-        orderBy: { createdAt: 'desc' },
-      },
     },
-  })
+  }) as any // Type assertion to include relations
 
   if (!company) {
     throw new Error('Company not found')

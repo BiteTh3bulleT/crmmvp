@@ -27,7 +27,7 @@ export async function DealsTable() {
   const deals = await getDeals()
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
@@ -82,20 +82,28 @@ export async function DealsTable() {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={`/companies/${deal.company.id}`}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    {deal.company.name}
-                  </Link>
+                  {deal.company ? (
+                    <Link
+                      href={`/companies/${deal.company.id}`}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      {deal.company.name}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={`/contacts/${deal.contact.id}`}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    {deal.contact.firstName} {deal.contact.lastName}
-                  </Link>
+                  {deal.contact ? (
+                    <Link
+                      href={`/contacts/${deal.contact.id}`}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      {deal.contact.firstName} {deal.contact.lastName}
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {deal.closeDate ? (

@@ -3,6 +3,18 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { prisma } from './prisma'
 
+// Validate required environment variables at startup
+if (!process.env.NEXTAUTH_SECRET) {
+  throw new Error(
+    'NEXTAUTH_SECRET environment variable is required. Generate one with: openssl rand -base64 32'
+  )
+}
+
+// 8 hours in production, 24 hours in development
+const JWT_MAX_AGE_SECONDS = process.env.NODE_ENV === 'production'
+  ? 60 * 60 * 8
+  : 60 * 60 * 24
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -39,12 +51,17 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           name: user.name,
+          role: user.role,
         }
       }
     })
   ],
   session: {
-    strategy: 'jwt'
+    strategy: 'jwt',
+    maxAge: JWT_MAX_AGE_SECONDS,
+  },
+  jwt: {
+    maxAge: JWT_MAX_AGE_SECONDS,
   },
   pages: {
     signIn: '/login',
@@ -53,12 +70,14 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+        token.role = (user as { role?: string }).role
       }
       return token
     },
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string
+        session.user.role = token.role as string
       }
       return session
     }

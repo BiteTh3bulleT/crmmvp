@@ -50,13 +50,14 @@ fi
 # Create .env.local with alternative port if it doesn't exist
 if [ ! -f ".env.local" ]; then
     print_info "Creating .env.local with alternative port (5434)..."
+    NEXTAUTH_SECRET_VALUE=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
     cat > .env.local << EOF
 # Database
 DATABASE_URL="postgresql://postgres:password@localhost:5434/crm_mvp?schema=public"
 
 # NextAuth
 NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-nextauth-secret-key-change-in-production"
+NEXTAUTH_SECRET="${NEXTAUTH_SECRET_VALUE}"
 
 # Seed User (for development)
 SEED_USER_EMAIL="admin@example.com"

@@ -2,8 +2,7 @@ import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { Sidebar } from '@/components/sidebar'
-import { Header } from '@/components/header'
+import { NavigationLayout } from '@/components/navigation-layout'
 import { AssistantPanel } from '@/components/assistant/assistant-panel'
 
 export const dynamic = 'force-dynamic'
@@ -39,14 +38,8 @@ export default async function AssistantPage() {
   }))
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Sidebar />
-      <div className="lg:pl-64">
-        <Header />
-        <main>
-          <AssistantPanel initialThreads={serializedThreads} />
-        </main>
-      </div>
-    </div>
+    <NavigationLayout>
+      <AssistantPanel initialThreads={serializedThreads} />
+    </NavigationLayout>
   )
 }

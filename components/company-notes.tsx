@@ -22,7 +22,7 @@ interface CompanyNotesProps {
 
 export function CompanyNotes({ companyId, notes }: CompanyNotesProps) {
   const [showNoteForm, setShowNoteForm] = useState(false)
-  const [activities, setActivities] = useState(null)
+  const [activities, setActivities] = useState<any[]>([])
 
   // Load activities on mount
   useEffect(() => {

@@ -115,6 +115,8 @@ model Company {
   contacts    Contact[]
   deals       Deal[]
 
+  @@index([ownerUserId])
+  @@index([name])
   @@map("companies")
 }
 
@@ -134,6 +136,9 @@ model Contact {
   company     Company? @relation(fields: [companyId], references: [id])
   deals       Deal[]
 
+  @@index([ownerUserId])
+  @@index([companyId])
+  @@index([email])
   @@map("contacts")
 }
 
@@ -153,6 +158,10 @@ model Deal {
   contactId   String?
   contact     Contact? @relation(fields: [contactId], references: [id])
 
+  @@index([ownerUserId])
+  @@index([stage])
+  @@index([companyId])
+  @@index([contactId])
   @@map("deals")
 }
 
@@ -169,6 +178,9 @@ model Task {
   ownerUserId String
   owner       User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
+  @@index([ownerUserId])
+  @@index([status])
+  @@index([dueAt])
   @@map("tasks")
 }
 
@@ -183,6 +195,8 @@ model Note {
   ownerUserId String
   owner       User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
+  @@index([ownerUserId])
+  @@index([relatedType, relatedId])
   @@map("notes")
 }
 
@@ -202,6 +216,8 @@ model AssistantThread {
   messages    AssistantMessage[]
   actions     AssistantAction[]
 
+  @@index([ownerUserId])
+  @@index([updatedAt])
   @@map("assistant_threads")
 }
 
@@ -215,6 +231,7 @@ model AssistantMessage {
   threadId String
   thread   AssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
+  @@index([threadId])
   @@map("assistant_messages")
 }
 
@@ -232,6 +249,7 @@ model DocumentEmbedding {
   owner       User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
   @@unique([sourceType, sourceId])
+  @@index([ownerUserId])
   @@map("document_embeddings")
 }
 
@@ -248,5 +266,65 @@ model AssistantAction {
   threadId String
   thread   AssistantThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
+  @@index([threadId])
+  @@index([status])
   @@map("assistant_actions")
+}
+
+// ==========================================
+// Rate Limiting & Metrics Models
+// ==========================================
+
+model RateLimitEntry {
+  id         String   @id @default(cuid())
+  identifier String   // userId:endpoint combination
+  count      Int      @default(0)
+  windowStart DateTime
+  windowMs   Int      // Window size in milliseconds
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, windowStart])
+  @@index([identifier])
+  @@index([windowStart])
+  @@map("rate_limit_entries")
+}
+
+model MetricEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  eventType String
+  metadata  Json?
+  duration  Int?     // Duration in milliseconds
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("metric_events")
+}
+
+// ==========================================
+// Audit Logging Model
+// ==========================================
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  action        String   // e.g., "user.login", "deal.create", "contact.delete"
+  resourceType  String?  // e.g., "Deal", "Contact", "Company"
+  resourceId    String?
+  metadata      Json?    // Additional context
+  ipAddress     String?
+  userAgent     String?
+  correlationId String?  // Request correlation ID
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([resourceType, resourceId])
+  @@index([correlationId])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

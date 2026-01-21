@@ -17,7 +17,7 @@ export async function ContactsTable() {
   const contacts = await getContacts()
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>

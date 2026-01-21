@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         where: { threadId }
       })
 
-      let titleUpdate = { updatedAt: new Date() }
+      let titleUpdate: { updatedAt: Date; title?: string } = { updatedAt: new Date() }
 
       // Generate better title for first user message
       if (messageCount === 1) {
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
                 data: {
                   threadId,
                   actionType: parsed.actionType,
-                  payloadJson: parsed.payload,
+                  payloadJson: parsed.payload as any,
                   status: ActionStatus.PROPOSED
                 }
               })

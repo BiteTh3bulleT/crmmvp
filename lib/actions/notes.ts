@@ -135,19 +135,12 @@ export async function deleteNote(id: string) {
     throw new Error('Unauthorized')
   }
 
-  const note = await prisma.note.findFirst({
+  // Atomic delete with ownership check
+  const note = await prisma.note.delete({
     where: {
       id,
       ownerUserId: session.user.id,
     },
-  })
-
-  if (!note) {
-    throw new Error('Note not found')
-  }
-
-  await prisma.note.delete({
-    where: { id },
   })
 
   // Revalidate relevant pages

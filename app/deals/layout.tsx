@@ -1,6 +1,6 @@
 import { NavigationLayout } from '@/components/navigation-layout'
 
-export default function DashboardLayout({
+export default function DealsLayout({
   children,
 }: {
   children: React.ReactNode

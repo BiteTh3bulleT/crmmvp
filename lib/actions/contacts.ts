@@ -65,9 +65,6 @@ export async function getContact(id: string) {
       deals: {
         orderBy: { createdAt: 'desc' },
       },
-      notes: {
-        orderBy: { createdAt: 'desc' },
-      },
     },
   })
 

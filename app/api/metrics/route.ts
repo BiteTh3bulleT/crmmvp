@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getStats, getUserStats } from '@/lib/usage-metrics'
 import { UserRole } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { parsePositiveInt } from '@/lib/validation'
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +15,8 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const timeRange = parseInt(searchParams.get('hours') || '24')
+    // Validate numeric params with bounds checking
+    const timeRange = Math.min(parsePositiveInt(searchParams.get('hours'), 24), 168) // Max 1 week
     const userOnly = searchParams.get('userOnly') === 'true'
 
     if (userOnly) {

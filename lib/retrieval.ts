@@ -65,43 +65,57 @@ export async function semanticSearch(
   const minSimilarity = options?.minSimilarity || 0.3
   const vectorString = `[${queryEmbedding.join(',')}]`
 
-  // Build source type filter
-  let sourceTypeFilter = ''
-  if (options?.sourceTypes && options.sourceTypes.length > 0) {
-    const types = options.sourceTypes.map(t => `'${t}'`).join(',')
-    sourceTypeFilter = `AND "sourceType" IN (${types})`
-  }
+  // Validate sourceTypes against the enum to prevent injection
+  const validSourceTypes: SourceType[] = ['COMPANY', 'CONTACT', 'DEAL', 'TASK', 'NOTE']
+  const filteredSourceTypes = options?.sourceTypes?.filter(t => validSourceTypes.includes(t)) || []
 
   // Semantic search with freshness bias using pgvector
   // The score combines cosine similarity with a time decay factor
-  const results = await prisma.$queryRawUnsafe<Array<{
+  // Use parameterized query with Prisma.sql for safety
+  let results: Array<{
     id: string
     sourceType: SourceType
     sourceId: string
     contentText: string
     similarity: number
-  }>>(
+  }>
+
+  if (filteredSourceTypes.length > 0) {
+    // Query with source type filter using ANY() for parameterized array
+    results = await prisma.$queryRaw`
+      SELECT
+        id,
+        "sourceType",
+        "sourceId",
+        "contentText",
+        (1 - (embedding <=> ${vectorString}::vector)) * (1 - ${FRESHNESS_WEIGHT}) +
+        (1 - LEAST(EXTRACT(EPOCH FROM (NOW() - "updatedAt")) / 2592000, 1)) * ${FRESHNESS_WEIGHT}
+        AS similarity
+      FROM document_embeddings
+      WHERE "ownerUserId" = ${userId}
+        AND embedding IS NOT NULL
+        AND "sourceType" = ANY(${filteredSourceTypes}::text[])
+      ORDER BY similarity DESC
+      LIMIT ${topK}
     `
-    SELECT
-      id,
-      "sourceType",
-      "sourceId",
-      "contentText",
-      (1 - (embedding <=> $1::vector)) * (1 - $2) +
-      (1 - LEAST(EXTRACT(EPOCH FROM (NOW() - "updatedAt")) / 2592000, 1)) * $2
-      AS similarity
-    FROM document_embeddings
-    WHERE "ownerUserId" = $3
-      AND embedding IS NOT NULL
-      ${sourceTypeFilter}
-    ORDER BY similarity DESC
-    LIMIT $4
-    `,
-    vectorString,
-    FRESHNESS_WEIGHT,
-    userId,
-    topK
-  )
+  } else {
+    // Query without source type filter
+    results = await prisma.$queryRaw`
+      SELECT
+        id,
+        "sourceType",
+        "sourceId",
+        "contentText",
+        (1 - (embedding <=> ${vectorString}::vector)) * (1 - ${FRESHNESS_WEIGHT}) +
+        (1 - LEAST(EXTRACT(EPOCH FROM (NOW() - "updatedAt")) / 2592000, 1)) * ${FRESHNESS_WEIGHT}
+        AS similarity
+      FROM document_embeddings
+      WHERE "ownerUserId" = ${userId}
+        AND embedding IS NOT NULL
+      ORDER BY similarity DESC
+      LIMIT ${topK}
+    `
+  }
 
   // Filter by minimum similarity and enrich with entity details
   const enrichedResults: RetrievalResult[] = []
@@ -168,9 +182,7 @@ async function keywordSearch(
           url: `/companies/${company.id}`,
           metadata: {
             status: 'Active',
-            createdAt: company.createdAt.toISOString(),
-            contactCount: company._count?.contacts || 0,
-            dealCount: company._count?.deals || 0
+            createdAt: company.createdAt.toISOString()
           }
         }
       })

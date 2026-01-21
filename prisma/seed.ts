@@ -3,13 +3,45 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
+// Password complexity validation
+function validatePasswordComplexity(password: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+
+  if (password.length < 12) {
+    errors.push('Password must be at least 12 characters long')
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter')
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter')
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one number')
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    errors.push('Password must contain at least one special character')
+  }
+
+  return { valid: errors.length === 0, errors }
+}
+
 async function main() {
   // Create seed user
   const seedPassword = process.env.SEED_USER_PASSWORD
   if (!seedPassword) {
     throw new Error('SEED_USER_PASSWORD environment variable is required')
   }
-  const hashedPassword = await bcrypt.hash(seedPassword, 10)
+
+  // Validate password complexity
+  const passwordValidation = validatePasswordComplexity(seedPassword)
+  if (!passwordValidation.valid) {
+    throw new Error(
+      `Password does not meet complexity requirements:\n${passwordValidation.errors.join('\n')}`
+    )
+  }
+
+  const hashedPassword = await bcrypt.hash(seedPassword, 12)
 
   const user = await prisma.user.upsert({
     where: { email: process.env.SEED_USER_EMAIL || 'admin@example.com' },

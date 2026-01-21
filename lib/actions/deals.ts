@@ -111,20 +111,12 @@ export async function updateDeal(id: string, input: UpdateDealInput) {
     throw new Error('Unauthorized')
   }
 
-  // Ensure the deal belongs to the user
-  const existingDeal = await prisma.deal.findFirst({
+  // Atomic update with ownership check
+  const deal = await prisma.deal.update({
     where: {
       id,
       ownerUserId: session.user.id,
     },
-  })
-
-  if (!existingDeal) {
-    throw new Error('Deal not found')
-  }
-
-  const deal = await prisma.deal.update({
-    where: { id },
     data: input,
     include: {
       company: {
@@ -154,20 +146,12 @@ export async function deleteDeal(id: string) {
     throw new Error('Unauthorized')
   }
 
-  // Ensure the deal belongs to the user
-  const existingDeal = await prisma.deal.findFirst({
+  // Atomic delete with ownership check
+  await prisma.deal.delete({
     where: {
       id,
       ownerUserId: session.user.id,
     },
-  })
-
-  if (!existingDeal) {
-    throw new Error('Deal not found')
-  }
-
-  await prisma.deal.delete({
-    where: { id },
   })
 
   revalidatePath('/deals')

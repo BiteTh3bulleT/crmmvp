@@ -233,7 +233,7 @@ export async function proposeAction(
     data: {
       threadId,
       actionType,
-      payloadJson: payload,
+      payloadJson: payload as any,
       status: ActionStatus.PROPOSED
     }
   })

@@ -1,12 +1,16 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Search, X } from 'lucide-react'
+import { Search, X, Menu } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SearchResults } from '@/components/search-results'
 
-export function Header() {
+interface HeaderProps {
+  onMobileMenuToggle: () => void
+}
+
+export function Header({ onMobileMenuToggle }: HeaderProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [isSearching, setIsSearching] = useState(false)
@@ -70,7 +74,18 @@ export function Header() {
   }
 
   return (
-    <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+    <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-3 border-b border-gray-200 bg-white px-3 shadow-sm sm:gap-x-4 sm:px-4 lg:px-8">
+      {/* Mobile menu button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="lg:hidden"
+        onClick={onMobileMenuToggle}
+      >
+        <Menu className="h-6 w-6" />
+        <span className="sr-only">Open main menu</span>
+      </Button>
+
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
         <div ref={searchRef} className="relative flex flex-1">
           <label htmlFor="search-field" className="sr-only">
@@ -82,8 +97,8 @@ export function Header() {
           />
           <Input
             id="search-field"
-            className="block h-full w-full border-0 py-0 pl-10 pr-8 text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:text-sm"
-            placeholder="Search companies, contacts, deals..."
+            className="block h-full w-full border-0 py-0 pl-10 pr-8 text-gray-900 placeholder:text-gray-400 focus:ring-0 text-sm"
+            placeholder="Search..."
             type="search"
             value={query}
             onChange={handleInputChange}

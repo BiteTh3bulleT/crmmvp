@@ -41,27 +41,6 @@ export async function getTasks(search?: string) {
       { status: 'asc' }, // OPEN first, then DONE
       { dueAt: 'asc' }, // Earlier due dates first
     ],
-    include: {
-      relatedCompany: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      relatedContact: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-        },
-      },
-      relatedDeal: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-    },
   })
 
   return tasks
@@ -79,27 +58,6 @@ export async function createTask(input: CreateTaskInput) {
       ...input,
       ownerUserId: session.user.id,
     },
-    include: {
-      relatedCompany: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      relatedContact: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-        },
-      },
-      relatedDeal: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-    },
   })
 
   revalidatePath('/tasks')
@@ -113,42 +71,13 @@ export async function updateTask(id: string, input: UpdateTaskInput) {
     throw new Error('Unauthorized')
   }
 
-  // Ensure the task belongs to the user
-  const existingTask = await prisma.task.findFirst({
+  // Atomic update with ownership check
+  const task = await prisma.task.update({
     where: {
       id,
       ownerUserId: session.user.id,
     },
-  })
-
-  if (!existingTask) {
-    throw new Error('Task not found')
-  }
-
-  const task = await prisma.task.update({
-    where: { id },
     data: input,
-    include: {
-      relatedCompany: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      relatedContact: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-        },
-      },
-      relatedDeal: {
-        select: {
-          id: true,
-          title: true,
-        },
-      },
-    },
   })
 
   revalidatePath('/tasks')
@@ -162,20 +91,12 @@ export async function deleteTask(id: string) {
     throw new Error('Unauthorized')
   }
 
-  // Ensure the task belongs to the user
-  const existingTask = await prisma.task.findFirst({
+  // Atomic delete with ownership check
+  await prisma.task.delete({
     where: {
       id,
       ownerUserId: session.user.id,
     },
-  })
-
-  if (!existingTask) {
-    throw new Error('Task not found')
-  }
-
-  await prisma.task.delete({
-    where: { id },
   })
 
   revalidatePath('/tasks')
