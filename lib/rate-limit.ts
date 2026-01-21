@@ -1,11 +1,11 @@
 /**
- * Simple in-memory rate limiting for assistant API endpoints
+ * Database-backed rate limiting for API endpoints
+ *
+ * Uses PostgreSQL for distributed rate limiting that works across multiple instances.
  */
 
-interface RateLimitEntry {
-  count: number
-  resetTime: number
-}
+import { prisma } from '@/lib/prisma'
+import { logWarn } from '@/lib/logger'
 
 interface RateLimitOptions {
   windowMs: number // Time window in milliseconds
@@ -14,75 +14,152 @@ interface RateLimitOptions {
   skipFailedRequests?: boolean // Skip rate limiting for failed requests
 }
 
-const rateLimitStore = new Map<string, RateLimitEntry>()
+interface RateLimitResult {
+  allowed: boolean
+  remaining: number
+  resetTime: number
+}
+
+// In-memory fallback for when database is unavailable
+const fallbackStore = new Map<string, { count: number; resetTime: number }>()
 
 /**
- * Clean up expired entries
+ * Check and increment rate limit counter atomically using database
  */
-function cleanupExpiredEntries() {
+async function checkRateLimitDb(
+  identifier: string,
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
   const now = Date.now()
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (now > entry.resetTime) {
-      rateLimitStore.delete(key)
-    }
+  const windowStart = new Date(Math.floor(now / options.windowMs) * options.windowMs)
+  const resetTime = windowStart.getTime() + options.windowMs
+
+  try {
+    // Upsert rate limit entry and get current count
+    const entry = await prisma.rateLimitEntry.upsert({
+      where: {
+        identifier_windowStart: {
+          identifier,
+          windowStart,
+        },
+      },
+      create: {
+        identifier,
+        windowStart,
+        windowMs: options.windowMs,
+        count: 1,
+      },
+      update: {
+        count: { increment: 1 },
+      },
+    })
+
+    const allowed = entry.count <= options.maxRequests
+    const remaining = Math.max(0, options.maxRequests - entry.count)
+
+    return { allowed, remaining, resetTime }
+  } catch (error) {
+    // Fallback to in-memory if database fails
+    logWarn('Rate limit database error, using fallback', {
+      metadata: { identifier, error: error instanceof Error ? error.message : 'Unknown' },
+    })
+    return checkRateLimitFallback(identifier, options)
   }
 }
 
 /**
- * Check if request should be rate limited
+ * In-memory fallback rate limiter
  */
-export function checkRateLimit(
+function checkRateLimitFallback(
   identifier: string,
   options: RateLimitOptions
-): { allowed: boolean; remaining: number; resetTime: number } {
+): RateLimitResult {
   const now = Date.now()
   const key = `${identifier}:${Math.floor(now / options.windowMs)}`
+  const resetTime = Math.floor(now / options.windowMs) * options.windowMs + options.windowMs
 
-  // Clean up expired entries occasionally
-  if (Math.random() < 0.1) { // 10% chance to cleanup
-    cleanupExpiredEntries()
-  }
-
-  let entry = rateLimitStore.get(key)
+  let entry = fallbackStore.get(key)
 
   if (!entry || now > entry.resetTime) {
-    // Create new entry
-    entry = {
-      count: 0,
-      resetTime: now + options.windowMs
+    entry = { count: 1, resetTime }
+    fallbackStore.set(key, entry)
+
+    // Cleanup old entries
+    for (const [k, v] of fallbackStore.entries()) {
+      if (now > v.resetTime) fallbackStore.delete(k)
     }
-    rateLimitStore.set(key, entry)
+  } else {
+    entry.count++
   }
 
+  const allowed = entry.count <= options.maxRequests
   const remaining = Math.max(0, options.maxRequests - entry.count)
-  const allowed = entry.count < options.maxRequests
 
-  return {
-    allowed,
-    remaining,
-    resetTime: entry.resetTime
+  return { allowed, remaining, resetTime }
+}
+
+/**
+ * Check if request should be rate limited (for pre-check without incrementing)
+ */
+export async function checkRateLimit(
+  identifier: string,
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
+  const now = Date.now()
+  const windowStart = new Date(Math.floor(now / options.windowMs) * options.windowMs)
+  const resetTime = windowStart.getTime() + options.windowMs
+
+  try {
+    const entry = await prisma.rateLimitEntry.findUnique({
+      where: {
+        identifier_windowStart: {
+          identifier,
+          windowStart,
+        },
+      },
+    })
+
+    const count = entry?.count ?? 0
+    const allowed = count < options.maxRequests
+    const remaining = Math.max(0, options.maxRequests - count)
+
+    return { allowed, remaining, resetTime }
+  } catch {
+    // Fallback - allow request if database check fails
+    return { allowed: true, remaining: options.maxRequests, resetTime }
   }
 }
 
 /**
  * Record a request (increment counter)
  */
-export function recordRequest(identifier: string, options: RateLimitOptions): void {
+export async function recordRequest(identifier: string, options: RateLimitOptions): Promise<void> {
   const now = Date.now()
-  const key = `${identifier}:${Math.floor(now / options.windowMs)}`
+  const windowStart = new Date(Math.floor(now / options.windowMs) * options.windowMs)
 
-  let entry = rateLimitStore.get(key)
-
-  if (!entry || now > entry.resetTime) {
-    entry = {
-      count: 1,
-      resetTime: now + options.windowMs
-    }
-  } else {
-    entry.count++
+  try {
+    await prisma.rateLimitEntry.upsert({
+      where: {
+        identifier_windowStart: {
+          identifier,
+          windowStart,
+        },
+      },
+      create: {
+        identifier,
+        windowStart,
+        windowMs: options.windowMs,
+        count: 1,
+      },
+      update: {
+        count: { increment: 1 },
+      },
+    })
+  } catch (error) {
+    logWarn('Failed to record rate limit request', {
+      metadata: { identifier, error: error instanceof Error ? error.message : 'Unknown' },
+    })
   }
-
-  rateLimitStore.set(key, entry)
 }
 
 /**
@@ -94,7 +171,7 @@ export async function withRateLimit(
   options: RateLimitOptions,
   handler: () => Promise<Response>
 ): Promise<Response> {
-  const rateLimitResult = checkRateLimit(userId, options)
+  const rateLimitResult = await checkRateLimitDb(userId, options)
 
   if (!rateLimitResult.allowed) {
     const resetDate = new Date(rateLimitResult.resetTime)
@@ -105,7 +182,7 @@ export async function withRateLimit(
         error: 'Rate limit exceeded',
         message: `Too many requests. Try again in ${retryAfter} seconds.`,
         retryAfter,
-        resetTime: resetDate.toISOString()
+        resetTime: resetDate.toISOString(),
       }),
       {
         status: 429,
@@ -113,8 +190,8 @@ export async function withRateLimit(
           'Content-Type': 'application/json',
           'Retry-After': retryAfter.toString(),
           'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
-          'X-RateLimit-Reset': rateLimitResult.resetTime.toString()
-        }
+          'X-RateLimit-Reset': rateLimitResult.resetTime.toString(),
+        },
       }
     )
   }
@@ -122,19 +199,31 @@ export async function withRateLimit(
   try {
     const response = await handler()
 
-    // Only record the request if we don't want to skip successful requests
-    if (!options.skipSuccessfulRequests && response.status < 400) {
-      recordRequest(userId, options)
+    // Rate limit was already counted in checkRateLimitDb
+    // Only count additional for failed requests if not skipping
+    if (options.skipSuccessfulRequests && response.status < 400) {
+      // Don't count - already counted, no adjustment needed for this simplified version
     }
 
     return response
   } catch (error) {
-    // Record failed requests unless we want to skip them
-    if (!options.skipFailedRequests) {
-      recordRequest(userId, options)
-    }
     throw error
   }
+}
+
+/**
+ * Clean up old rate limit entries (run periodically)
+ */
+export async function cleanupRateLimitEntries(olderThanMs: number = 24 * 60 * 60 * 1000): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanMs)
+
+  const result = await prisma.rateLimitEntry.deleteMany({
+    where: {
+      windowStart: { lt: cutoff },
+    },
+  })
+
+  return result.count
 }
 
 // Predefined rate limit configurations
@@ -143,18 +232,18 @@ export const RATE_LIMITS = {
     windowMs: 60 * 1000, // 1 minute
     maxRequests: 10, // 10 requests per minute
     skipSuccessfulRequests: false,
-    skipFailedRequests: false
+    skipFailedRequests: false,
   },
   ASSISTANT_THREAD: {
     windowMs: 60 * 1000, // 1 minute
     maxRequests: 30, // 30 thread operations per minute
     skipSuccessfulRequests: false,
-    skipFailedRequests: false
+    skipFailedRequests: false,
   },
   GENERAL_API: {
     windowMs: 60 * 1000, // 1 minute
     maxRequests: 100, // 100 general requests per minute
     skipSuccessfulRequests: true, // Don't count successful requests
-    skipFailedRequests: false
-  }
+    skipFailedRequests: false,
+  },
 } as const

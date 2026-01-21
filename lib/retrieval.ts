@@ -117,20 +117,150 @@ export async function semanticSearch(
     `
   }
 
-  // Filter by minimum similarity and enrich with entity details
-  const enrichedResults: RetrievalResult[] = []
+  // Filter by minimum similarity
+  const filteredResults = results.filter(r => r.similarity >= minSimilarity)
+
+  // Batch fetch entity details to avoid N+1 queries
+  const entityMap = await batchGetEntityDetails(filteredResults, userId)
+
+  // Enrich results with entity details
+  const enrichedResults: RetrievalResult[] = filteredResults.map(result => ({
+    ...result,
+    entity: entityMap.get(`${result.sourceType}:${result.sourceId}`) || null
+  }))
+
+  return enrichedResults
+}
+
+/**
+ * Batch fetch entity details to avoid N+1 queries
+ */
+async function batchGetEntityDetails(
+  results: Array<{ sourceType: SourceType; sourceId: string }>,
+  userId: string
+): Promise<Map<string, EntityDetails>> {
+  const entityMap = new Map<string, EntityDetails>()
+
+  // Group results by source type
+  const byType: Record<SourceType, string[]> = {
+    COMPANY: [],
+    CONTACT: [],
+    DEAL: [],
+    TASK: [],
+    NOTE: [],
+  }
 
   for (const result of results) {
-    if (result.similarity < minSimilarity) continue
+    byType[result.sourceType].push(result.sourceId)
+  }
 
-    const entity = await getEntityDetails(result.sourceType, result.sourceId, userId)
-    enrichedResults.push({
-      ...result,
-      entity
+  // Batch fetch each type in parallel
+  const [companies, contacts, deals, tasks, notes] = await Promise.all([
+    byType.COMPANY.length > 0
+      ? prisma.company.findMany({
+          where: { id: { in: byType.COMPANY }, ownerUserId: userId },
+        })
+      : [],
+    byType.CONTACT.length > 0
+      ? prisma.contact.findMany({
+          where: { id: { in: byType.CONTACT }, ownerUserId: userId },
+          include: { company: true },
+        })
+      : [],
+    byType.DEAL.length > 0
+      ? prisma.deal.findMany({
+          where: { id: { in: byType.DEAL }, ownerUserId: userId },
+          include: { company: true, contact: true },
+        })
+      : [],
+    byType.TASK.length > 0
+      ? prisma.task.findMany({
+          where: { id: { in: byType.TASK }, ownerUserId: userId },
+        })
+      : [],
+    byType.NOTE.length > 0
+      ? prisma.note.findMany({
+          where: { id: { in: byType.NOTE }, ownerUserId: userId },
+        })
+      : [],
+  ])
+
+  // Map companies
+  for (const company of companies) {
+    entityMap.set(`COMPANY:${company.id}`, {
+      id: company.id,
+      type: 'COMPANY',
+      title: company.name,
+      subtitle: company.website || undefined,
+      url: `/companies/${company.id}`,
     })
   }
 
-  return enrichedResults
+  // Map contacts
+  for (const contact of contacts) {
+    entityMap.set(`CONTACT:${contact.id}`, {
+      id: contact.id,
+      type: 'CONTACT',
+      title: `${contact.firstName} ${contact.lastName}`,
+      subtitle: contact.company?.name || contact.title || undefined,
+      url: `/contacts/${contact.id}`,
+    })
+  }
+
+  // Map deals
+  for (const deal of deals) {
+    entityMap.set(`DEAL:${deal.id}`, {
+      id: deal.id,
+      type: 'DEAL',
+      title: deal.title,
+      subtitle: `${deal.stage} - $${deal.amountCents ? deal.amountCents / 100 : 0}`,
+      url: `/deals/${deal.id}`,
+      metadata: {
+        stage: deal.stage,
+        amountCents: deal.amountCents,
+        dealAmount: deal.amountCents ? deal.amountCents / 100 : undefined,
+        companyName: deal.company?.name,
+        contactName: deal.contact ? `${deal.contact.firstName} ${deal.contact.lastName}` : undefined,
+        closeDate: deal.closeDate?.toISOString(),
+        createdAt: deal.createdAt.toISOString(),
+        status: deal.stage.toLowerCase(),
+      },
+    })
+  }
+
+  // Map tasks
+  for (const task of tasks) {
+    entityMap.set(`TASK:${task.id}`, {
+      id: task.id,
+      type: 'TASK',
+      title: task.title,
+      subtitle: task.status === 'DONE' ? 'Completed' : (task.dueAt ? `Due: ${task.dueAt.toLocaleDateString()}` : 'Open'),
+      url: `/tasks`,
+      metadata: {
+        status: task.status,
+        dueAt: task.dueAt?.toISOString(),
+        createdAt: task.createdAt.toISOString(),
+      },
+    })
+  }
+
+  // Map notes
+  for (const note of notes) {
+    entityMap.set(`NOTE:${note.id}`, {
+      id: note.id,
+      type: 'NOTE',
+      title: note.body.slice(0, 50) + (note.body.length > 50 ? '...' : ''),
+      subtitle: `${note.relatedType} note`,
+      url: `/${note.relatedType.toLowerCase()}s/${note.relatedId}`,
+      metadata: {
+        relatedType: note.relatedType,
+        relatedId: note.relatedId,
+        createdAt: note.createdAt.toISOString(),
+      },
+    })
+  }
+
+  return entityMap
 }
 
 /**

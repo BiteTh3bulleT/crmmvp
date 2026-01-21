@@ -2,14 +2,17 @@
  * Usage Metrics and Analytics Module
  *
  * Tracks assistant usage, performance, and user engagement metrics.
- * Provides insights into feature adoption and system performance.
+ * Persists metrics to database for durability across restarts.
  */
 
-interface MetricEvent {
-  timestamp: Date
+import { prisma } from '@/lib/prisma'
+import { logError, logInfo } from '@/lib/logger'
+import type { Prisma, MetricEvent } from '@prisma/client'
+
+interface MetricEventInput {
   userId: string
   eventType: string
-  metadata?: Record<string, any>
+  metadata?: Prisma.InputJsonValue
   duration?: number // in milliseconds
   success: boolean
 }
@@ -33,32 +36,36 @@ interface UsageStats {
 }
 
 class MetricsTracker {
-  private events: MetricEvent[] = []
-  private readonly maxEvents = 10000 // Keep last 10k events in memory
-
   /**
-   * Record a metric event
+   * Record a metric event to the database
    */
-  record(event: Omit<MetricEvent, 'timestamp'>): void {
-    const metricEvent: MetricEvent = {
-      ...event,
-      timestamp: new Date()
-    }
+  async record(event: MetricEventInput): Promise<void> {
+    try {
+      await prisma.metricEvent.create({
+        data: {
+          userId: event.userId,
+          eventType: event.eventType,
+          metadata: event.metadata,
+          duration: event.duration,
+          success: event.success,
+        },
+      })
 
-    this.events.push(metricEvent)
-
-    // Maintain size limit
-    if (this.events.length > this.maxEvents) {
-      this.events = this.events.slice(-this.maxEvents)
-    }
-
-    // Log important events in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[METRICS] ${event.eventType}:`, {
-        userId: event.userId,
-        success: event.success,
-        duration: event.duration,
-        metadata: event.metadata
+      if (process.env.NODE_ENV === 'development') {
+        logInfo(`[METRICS] ${event.eventType}`, {
+          userId: event.userId,
+          metadata: {
+            success: event.success,
+            duration: event.duration,
+          },
+        })
+      }
+    } catch (error) {
+      logError('Failed to record metric event', {
+        metadata: {
+          eventType: event.eventType,
+          error: error instanceof Error ? error.message : 'Unknown',
+        },
       })
     }
   }
@@ -66,133 +73,164 @@ class MetricsTracker {
   /**
    * Record a chat query
    */
-  recordChatQuery(userId: string, query: string, responseTime: number, success: boolean, metadata?: Record<string, any>): void {
-    this.record({
+  async recordChatQuery(
+    userId: string,
+    query: string,
+    responseTime: number,
+    success: boolean,
+    metadata?: Prisma.InputJsonValue
+  ): Promise<void> {
+    await this.record({
       userId,
       eventType: 'chat_query',
-      metadata: { query, ...metadata },
+      metadata: { query: query.slice(0, 200), ...(metadata as object) },
       duration: responseTime,
-      success
+      success,
     })
   }
 
   /**
    * Record an action proposal
    */
-  recordActionProposed(userId: string, actionType: string, threadId: string): void {
-    this.record({
+  async recordActionProposed(userId: string, actionType: string, threadId: string): Promise<void> {
+    await this.record({
       userId,
       eventType: 'action_proposed',
       metadata: { actionType, threadId },
-      success: true
+      success: true,
     })
   }
 
   /**
    * Record an action confirmation
    */
-  recordActionConfirmed(userId: string, actionType: string, threadId: string, executionTime: number, success: boolean): void {
-    this.record({
+  async recordActionConfirmed(
+    userId: string,
+    actionType: string,
+    threadId: string,
+    executionTime: number,
+    success: boolean
+  ): Promise<void> {
+    await this.record({
       userId,
       eventType: 'action_confirmed',
       metadata: { actionType, threadId },
       duration: executionTime,
-      success
+      success,
     })
   }
 
   /**
    * Record thread creation
    */
-  recordThreadCreated(userId: string, threadId: string): void {
-    this.record({
+  async recordThreadCreated(userId: string, threadId: string): Promise<void> {
+    await this.record({
       userId,
       eventType: 'thread_created',
       metadata: { threadId },
-      success: true
+      success: true,
     })
   }
 
   /**
    * Record thread deletion
    */
-  recordThreadDeleted(userId: string, threadId: string): void {
-    this.record({
+  async recordThreadDeleted(userId: string, threadId: string): Promise<void> {
+    await this.record({
       userId,
       eventType: 'thread_deleted',
       metadata: { threadId },
-      success: true
+      success: true,
     })
   }
 
   /**
    * Record search usage
    */
-  recordSearch(userId: string, query: string, resultCount: number): void {
-    this.record({
+  async recordSearch(userId: string, query: string, resultCount: number): Promise<void> {
+    await this.record({
       userId,
       eventType: 'search_performed',
-      metadata: { query, resultCount },
-      success: true
+      metadata: { query: query.slice(0, 200), resultCount },
+      success: true,
     })
   }
 
   /**
    * Record embedding generation
    */
-  recordEmbeddingGeneration(userId: string, success: boolean, retryCount: number = 0): void {
-    this.record({
+  async recordEmbeddingGeneration(
+    userId: string,
+    success: boolean,
+    retryCount: number = 0
+  ): Promise<void> {
+    await this.record({
       userId,
       eventType: 'embedding_generated',
       metadata: { retryCount },
-      success
+      success,
     })
   }
 
   /**
-   * Get usage statistics
+   * Get usage statistics from database
    */
-  getStats(timeRangeHours: number = 24): UsageStats {
+  async getStats(timeRangeHours: number = 24): Promise<UsageStats> {
     const cutoff = new Date(Date.now() - timeRangeHours * 60 * 60 * 1000)
-    const recentEvents = this.events.filter(e => e.timestamp >= cutoff)
 
-    const queries = recentEvents.filter(e => e.eventType === 'chat_query')
+    const [events, uniqueUsers] = await Promise.all([
+      prisma.metricEvent.findMany({
+        where: { createdAt: { gte: cutoff } },
+        select: {
+          eventType: true,
+          duration: true,
+          success: true,
+          metadata: true,
+        },
+      }),
+      prisma.metricEvent.findMany({
+        where: { createdAt: { gte: cutoff } },
+        select: { userId: true },
+        distinct: ['userId'],
+      }),
+    ])
+
+    const queries = events.filter(e => e.eventType === 'chat_query')
     const successfulQueries = queries.filter(e => e.success)
     const failedQueries = queries.filter(e => !e.success)
 
-    const actionsProposed = recentEvents.filter(e => e.eventType === 'action_proposed')
-    const actionsConfirmed = recentEvents.filter(e => e.eventType === 'action_confirmed')
-    const threads = recentEvents.filter(e => e.eventType === 'thread_created')
+    const actionsProposed = events.filter(e => e.eventType === 'action_proposed')
+    const actionsConfirmed = events.filter(e => e.eventType === 'action_confirmed')
+    const threads = events.filter(e => e.eventType === 'thread_created')
 
     // Calculate average response time
     const responseTimes = successfulQueries
       .map(e => e.duration)
-      .filter((time): time is number => time !== undefined)
-    const avgResponseTime = responseTimes.length > 0
-      ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
-      : 0
-
-    // Get unique users
-    const uniqueUsers = new Set(recentEvents.map(e => e.userId))
+      .filter((time): time is number => time !== null && time !== undefined)
+    const avgResponseTime =
+      responseTimes.length > 0
+        ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
+        : 0
 
     // Get top queries
     const queryCounts = new Map<string, number>()
     queries.forEach(event => {
-      const query = (event.metadata?.query as string)?.toLowerCase()?.slice(0, 50) || 'unknown'
+      const query =
+        ((event.metadata as Record<string, unknown>)?.query as string)?.toLowerCase()?.slice(0, 50) || 'unknown'
       queryCounts.set(query, (queryCounts.get(query) || 0) + 1)
     })
 
     const topQueries = Array.from(queryCounts.entries())
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
       .map(([query, count]) => ({ query, count }))
 
     // Calculate error rates by event type
     const errorRates: Record<string, number> = {}
-    const eventTypes = [...new Set(recentEvents.map(e => e.eventType))]
+    const eventTypes = [...new Set(events.map(e => e.eventType))]
 
     eventTypes.forEach(eventType => {
-      const eventsOfType = recentEvents.filter(e => e.eventType === eventType)
+      const eventsOfType = events.filter(e => e.eventType === eventType)
       const errorCount = eventsOfType.filter(e => !e.success).length
       errorRates[eventType] = eventsOfType.length > 0 ? errorCount / eventsOfType.length : 0
     })
@@ -211,31 +249,38 @@ class MetricsTracker {
       totalActionsProposed: actionsProposed.length,
       totalActionsConfirmed: actionsConfirmed.length,
       totalThreads: threads.length,
-      activeUsers: uniqueUsers.size,
+      activeUsers: uniqueUsers.length,
       topQueries,
       errorRates,
       performanceMetrics: {
         p50,
         p95,
-        p99
-      }
+        p99,
+      },
     }
   }
 
   /**
    * Get user-specific metrics
    */
-  getUserStats(userId: string, timeRangeHours: number = 24): {
+  async getUserStats(
+    userId: string,
+    timeRangeHours: number = 24
+  ): Promise<{
     queries: number
     actionsConfirmed: number
     threadsCreated: number
     avgResponseTime: number
     successRate: number
-  } {
+  }> {
     const cutoff = new Date(Date.now() - timeRangeHours * 60 * 60 * 1000)
-    const userEvents = this.events.filter(e =>
-      e.userId === userId && e.timestamp >= cutoff
-    )
+
+    const userEvents = await prisma.metricEvent.findMany({
+      where: {
+        userId,
+        createdAt: { gte: cutoff },
+      },
+    })
 
     const queries = userEvents.filter(e => e.eventType === 'chat_query')
     const successfulQueries = queries.filter(e => e.success)
@@ -244,10 +289,11 @@ class MetricsTracker {
 
     const responseTimes = successfulQueries
       .map(e => e.duration)
-      .filter((time): time is number => time !== undefined)
-    const avgResponseTime = responseTimes.length > 0
-      ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
-      : 0
+      .filter((time): time is number => time !== null && time !== undefined)
+    const avgResponseTime =
+      responseTimes.length > 0
+        ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
+        : 0
 
     const successRate = queries.length > 0 ? successfulQueries.length / queries.length : 0
 
@@ -256,26 +302,21 @@ class MetricsTracker {
       actionsConfirmed: actionsConfirmed.length,
       threadsCreated: threadsCreated.length,
       avgResponseTime,
-      successRate
+      successRate,
     }
   }
 
   /**
-   * Export metrics for external analysis
+   * Clear old metrics (for maintenance)
    */
-  exportMetrics(): { events: MetricEvent[]; stats: UsageStats } {
-    return {
-      events: [...this.events],
-      stats: this.getStats()
-    }
-  }
-
-  /**
-   * Clear old metrics (for memory management)
-   */
-  clearOldMetrics(olderThanHours: number = 168): void { // 7 days default
+  async clearOldMetrics(olderThanHours: number = 168): Promise<number> {
     const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000)
-    this.events = this.events.filter(e => e.timestamp >= cutoff)
+
+    const result = await prisma.metricEvent.deleteMany({
+      where: { createdAt: { lt: cutoff } },
+    })
+
+    return result.count
   }
 }
 

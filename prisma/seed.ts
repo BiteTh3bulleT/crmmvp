@@ -27,6 +27,13 @@ function validatePasswordComplexity(password: string): { valid: boolean; errors:
 }
 
 async function main() {
+  // Block seeding in production
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Database seeding is disabled in production. Use proper user management instead.'
+    )
+  }
+
   // Create seed user
   const seedPassword = process.env.SEED_USER_PASSWORD
   if (!seedPassword) {

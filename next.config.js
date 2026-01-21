@@ -2,9 +2,12 @@
 const nextConfig = {
   // Server Actions are enabled by default in Next.js 14+
 
+  // Enable standalone output for Docker
+  output: 'standalone',
+
   // Security headers (only in production)
   async headers() {
-    // Skip security headers in development to avoid CSP issues
+    // Skip security headers in development to avoid static asset issues
     if (process.env.NODE_ENV === 'development') {
       return []
     }

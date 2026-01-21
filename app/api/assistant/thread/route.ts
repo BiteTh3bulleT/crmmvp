@@ -4,6 +4,16 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limit'
 import { recordThreadCreated, recordThreadDeleted } from '@/lib/usage-metrics'
+import { threadTitleSchema } from '@/lib/validation'
+import { safeDeleteWithOwnership } from '@/lib/db-utils'
+
+// Sanitize thread title to prevent XSS
+function sanitizeTitle(title: string): string {
+  return title
+    .replace(/[<>]/g, '') // Remove angle brackets
+    .trim()
+    .slice(0, 200) // Enforce max length
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +46,17 @@ export async function POST(request: NextRequest) {
 
         try {
           const body = await request.json()
-          title = body.title
+          if (body.title) {
+            // Validate and sanitize title
+            const validationResult = threadTitleSchema.safeParse(body.title)
+            if (!validationResult.success) {
+              return NextResponse.json(
+                { error: 'Invalid title: ' + validationResult.error.errors[0]?.message },
+                { status: 400 }
+              )
+            }
+            title = sanitizeTitle(body.title)
+          }
         } catch {
           // No body or invalid JSON, that's fine
         }
@@ -124,26 +144,22 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // First verify ownership, then delete
-    const thread = await prisma.assistantThread.findFirst({
-      where: {
-        id: threadId,
-        ownerUserId: session.user.id
-      }
-    })
+    // Atomic delete with ownership check to prevent TOCTOU race conditions
+    const result = await safeDeleteWithOwnership('assistantThread', threadId, session.user.id)
 
-    if (!thread) {
+    if (!result.success) {
+      return NextResponse.json(
+        { error: result.error || 'Failed to delete thread' },
+        { status: 500 }
+      )
+    }
+
+    if (!result.deleted) {
       return NextResponse.json(
         { error: 'Thread not found or unauthorized' },
         { status: 404 }
       )
     }
-
-    await prisma.assistantThread.delete({
-      where: {
-        id: threadId
-      }
-    })
 
     // Record thread deletion metrics
     recordThreadDeleted(session.user.id, threadId)
