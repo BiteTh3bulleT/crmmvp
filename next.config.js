@@ -2,8 +2,13 @@
 const nextConfig = {
   // Server Actions are enabled by default in Next.js 14+
 
-  // Security headers
+  // Security headers (only in production)
   async headers() {
+    // Skip security headers in development to avoid CSP issues
+    if (process.env.NODE_ENV === 'development') {
+      return []
+    }
+
     return [
       {
         source: '/(.*)',
