@@ -10,7 +10,7 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/crm_mvp?schema=public
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/crm_mvp?schema=public
       - NEXTAUTH_URL=http://localhost:3000
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - OLLAMA_URL=http://ollama:11434
@@ -29,7 +29,7 @@ services:
     environment:
       POSTGRES_DB: crm_mvp
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: password
     ports:
       - "5432:5432"
     volumes:
@@ -66,7 +66,7 @@ services:
       target: builder
     command: npx prisma migrate deploy
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/crm_mvp?schema=public
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/crm_mvp?schema=public
     depends_on:
       postgres:
         condition: service_healthy

@@ -36,6 +36,12 @@ A modern, clean CRM system built with Next.js 14, PostgreSQL, and Prisma.
 - Git
 - Ollama (optional, for AI assistant)
 
+### Windows 11 notes
+
+- Install Docker Desktop and ensure WSL2 integration is enabled (recommended).
+- Start Docker Desktop before running `npm run startup` (if you see a `dockerDesktopLinuxEngine` pipe error, Docker Desktop isn’t running or is set to Windows containers).
+- Run commands from PowerShell in the repo root.
+
 ### Option 1: Automated Setup (Recommended)
 
 1. **Clone the repository**
@@ -48,6 +54,10 @@ A modern, clean CRM system built with Next.js 14, PostgreSQL, and Prisma.
    ```bash
    # Using npm
    npm run startup
+
+   # Windows PowerShell wrappers (optional)
+   ./check-setup.ps1
+   ./start.ps1
 
    # Or directly
    ./start.sh
@@ -63,7 +73,7 @@ A modern, clean CRM system built with Next.js 14, PostgreSQL, and Prisma.
 
 3. **Open your browser**
    - Visit `http://localhost:3000`
-   - Login with: `admin@example.com` / `password123`
+   - Login with: `admin@example.com` / `Password123!`
 
 4. **(Optional) Set up Ollama for AI Assistant**
    ```bash
@@ -573,14 +583,21 @@ If port 3000 or 5432 is already in use:
 
 1. **Kill processes using the ports:**
    ```bash
-   # Find process using port 3000
+   # macOS/Linux
    lsof -ti:3000 | xargs kill -9
-
-   # Find process using port 5432
    lsof -ti:5432 | xargs kill -9
    ```
 
 2. **Or change ports in configuration files**
+
+**Windows PowerShell equivalent:**
+```powershell
+netstat -ano | findstr :3000
+taskkill /PID <pid> /F
+
+netstat -ano | findstr :5432
+taskkill /PID <pid> /F
+```
 
 ### Permission Issues
 
